@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Productivity Agent</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f9; --card: #ffffff; --text: #1a1d21; --muted: #6b7280;
+      --border: #e3e6ea; --accent: #4f46e5; --accent-text: #ffffff;
+      --green: #16a34a; --yellow: #ca8a04; --red: #dc2626; --grey: #9ca3af;
+      --bar: #e5e7eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115; --card: #181b21; --text: #e6e8eb; --muted: #9aa1ab;
+        --border: #2a2f37; --accent: #818cf8; --accent-text: #0f1115;
+        --bar: #2a2f37;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+    header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 1.6rem; }
+    h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    .muted { color: var(--muted); font-size: .9rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+    label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+    input, select, textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); font: inherit;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    input[type=range] { padding: 0; }
+    button {
+      margin-top: 14px; padding: 9px 16px; border: 0; border-radius: 6px; cursor: pointer;
+      background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    button.wide { width: 100%; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .metric { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+    .metric b { display: block; font-size: 1.3rem; }
+    details { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    summary { cursor: pointer; font-weight: 600; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .bar { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+    .bar > div { height: 100%; background: var(--accent); }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row > * { flex: 1; }
+    .danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; margin-top: 8px; font-size: .85rem; }
+    #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+      padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+    #toast.show { opacity: 1; }
+    #report { overflow-wrap: anywhere; }
+    #report h1, #report h2, #report h3 { font-size: 1.05rem; margin: 16px 0 6px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>⚡ Work Productivity AI Agent</h1>
+      <div class="muted">Plan your day, track progress, get an AI report.</div>
+    </div>
+    <div>
+      <label for="date">Date</label>
+      <input type="date" id="date" />
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <div class="card">
+        <h2>➕ Add New Task</h2>
+        <form id="addForm">
+          <label for="title">Task title</label>
+          <input id="title" required />
+          <label for="est">Estimated hours</label>
+          <input id="est" type="number" min="0.25" max="12" step="0.25" value="1" required />
+          <label for="notes">Initial notes / context</label>
+          <textarea id="notes" placeholder="Optional objectives or sub-tasks..."></textarea>
+          <button type="submit">Add Task</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>✏️ Update Task Progress</h2>
+        <div id="noTasksUpdate" class="muted">No tasks for this date yet.</div>
+        <form id="updateForm" hidden>
+          <label for="taskSel">Task</label>
+          <select id="taskSel"></select>
+          <label for="pct">Percentage done: <span id="pctVal">0</span>%</label>
+          <input id="pct" type="range" min="0" max="100" step="5" />
+          <div class="row">
+            <div>
+              <label for="status">Status</label>
+              <select id="status">
+                <option>Pending</option><option>In Progress</option><option>Completed</option><option>Blocked</option>
+              </select>
+            </div>
+            <div>
+              <label for="actual">Actual hours</label>
+              <input id="actual" type="number" min="0" max="16" step="0.25" />
+            </div>
+          </div>
+          <label for="updNotes">Progress notes / blockers</label>
+          <textarea id="updNotes"></textarea>
+          <button type="submit">Save Update</button>
+        </form>
+      </div>
+    </section>
+
+    <section>
+      <div class="card">
+        <h2>📊 Work Summary</h2>
+        <div id="summary"></div>
+        <div id="list"></div>
+        <button id="reportBtn" class="wide" hidden>🤖 Generate AI Productivity Report</button>
+      </div>
+      <div class="card" id="reportCard" hidden>
+        <h2>📝 End-of-Day Report</h2>
+        <div id="report"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const COLORS = { "Completed": "var(--green)", "In Progress": "var(--yellow)", "Blocked": "var(--red)", "Pending": "var(--grey)" };
+  let tasks = [];
+
+  function today() {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove("show"), 2500);
+  }
+
+  function esc(s) {
+    const div = document.createElement("div");
+    div.textContent = s ?? "";
+    return div.innerHTML;
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+    if (res.status === 204) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+    return data;
+  }
+
+  async function load() {
+    try {
+      tasks = await api(`/api/tasks?date=${$("date").value}`);
+    } catch (e) {
+      toast(e.message);
+      tasks = [];
+    }
+    render();
+  }
+
+  function render() {
+    const has = tasks.length > 0;
+    $("noTasksUpdate").hidden = has;
+    $("updateForm").hidden = !has;
+    $("reportBtn").hidden = !has;
+
+    if (!has) {
+      $("summary").innerHTML = "";
+      $("list").innerHTML = '<div class="muted">Add tasks on the left to build this day\'s tracking list.</div>';
+      return;
+    }
+
+    const est = tasks.reduce((s, t) => s + t.estimated_hours, 0);
+    const act = tasks.reduce((s, t) => s + t.actual_hours, 0);
+    const avg = tasks.reduce((s, t) => s + t.percentage_done, 0) / tasks.length;
+    $("summary").innerHTML = `
+      <div class="metrics">
+        <div class="metric"><span class="muted">Tasks</span><b>${tasks.length}</b></div>
+        <div class="metric"><span class="muted">Avg progress</span><b>${avg.toFixed(0)}%</b></div>
+        <div class="metric"><span class="muted">Est. time</span><b>${est}h</b></div>
+        <div class="metric"><span class="muted">Logged</span><b>${act}h</b></div>
+      </div>`;
+
+    $("list").innerHTML = tasks.map((t) => `
+      <details>
+        <summary><span class="dot" style="background:${COLORS[t.status] || COLORS.Pending}"></span>${esc(t.title)} — ${t.percentage_done}% [${esc(t.status)}]</summary>
+        <div class="muted">Estimated: ${t.estimated_hours}h · Actual: ${t.actual_hours}h</div>
+        ${t.initial_notes ? `<div><b>Initial note:</b> ${esc(t.initial_notes)}</div>` : ""}
+        ${t.update_notes ? `<div><b>Update note:</b> ${esc(t.update_notes)}</div>` : ""}
+        <div class="bar"><div style="width:${t.percentage_done}%"></div></div>
+        <button class="danger" data-delete="${t.id}">Delete</button>
+      </details>`).join("");
+
+    const sel = $("taskSel");
+    const prev = sel.value;
+    sel.innerHTML = tasks.map((t) => `<option value="${t.id}">#${t.id} - ${esc(t.title)} (${t.percentage_done}%)</option>`).join("");
+    if (tasks.some((t) => String(t.id) === prev)) sel.value = prev;
+    fillUpdateForm();
+  }
+
+  function fillUpdateForm() {
+    const t = tasks.find((x) => String(x.id) === $("taskSel").value);
+    if (!t) return;
+    $("pct").value = t.percentage_done;
+    $("pctVal").textContent = t.percentage_done;
+    $("status").value = t.status;
+    $("actual").value = t.actual_hours;
+    $("updNotes").value = t.update_notes || "";
+  }
+
+  $("addForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          title: $("title").value.trim(),
+          estimated_hours: parseFloat($("est").value),
+          date: $("date").value,
+          initial_notes: $("notes").value.trim() || null,
+        }),
+      });
+      e.target.reset();
+      toast("Task added");
+      load();
+    } catch (err) { toast(err.message); }
+  });
+
+  $("updateForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/api/tasks/${$("taskSel").value}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          percentage_done: parseInt($("pct").value, 10),
+          status: $("status").value,
+          actual_hours: parseFloat($("actual").value) || 0,
+          update_notes: $("updNotes").value,
+        }),
+      });
+      toast("Task updated");
+      load();
+    } catch (err) { toast(err.message); }
+  });
+
+  $("list").addEventListener("click", async (e) => {
+    const id = e.target.dataset.delete;
+    if (!id || !confirm("Delete this task?")) return;
+    try {
+      await api(`/api/tasks/${id}`, { method: "DELETE" });
+      toast("Task deleted");
+      load();
+    } catch (err) { toast(err.message); }
+  });
+
+  $("reportBtn").addEventListener("click", async () => {
+    const btn = $("reportBtn");
+    btn.disabled = true;
+    btn.textContent = "Claude is evaluating your day...";
+    try {
+      const data = await api(`/api/report?date=${$("date").value}`, { method: "POST" });
+      $("report").innerHTML = DOMPurify.sanitize(marked.parse(data.report));
+      $("reportCard").hidden = false;
+      $("reportCard").scrollIntoView({ behavior: "smooth" });
+    } catch (err) { toast(err.message); }
+    btn.disabled = false;
+    btn.textContent = "🤖 Generate AI Productivity Report";
+  });
+
+  $("taskSel").addEventListener("change", fillUpdateForm);
+  $("pct").addEventListener("input", () => ($("pctVal").textContent = $("pct").value));
+  $("date").addEventListener("change", () => { $("reportCard").hidden = true; load(); });
+
+  $("date").value = today();
+  load();
+</script>
+</body>
+</html>
