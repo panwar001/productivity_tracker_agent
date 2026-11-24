@@ -1,5 +1,27 @@
-anthropic>=0.40.0
-fastapi>=0.115.0
-uvicorn>=0.30.0
-python-dotenv>=1.0.0
-psycopg[binary]>=3.2.0
+# Exact versions, so dependency scanners can match them to known vulnerabilities.
+# Pinned from the project's working environment (direct dependencies first, then the packages they pull in).
+anthropic==2.1.0
+fastapi==0.115.0
+uvicorn==0.30.0
+python-dotenv==1.2.4
+psycopg[binary]==3.3.6
+
+# Transitive dependencies
+annotated-types==0.8.0
+anyio==4.15.1
+click==8.5.0
+docstring_parser==0.18.0
+h11==0.16.0
+httpcore2==2.16.0
+httpx2==2.16.0
+idna==3.20
+jiter==0.17.0
+opentelemetry-api==1.45.1
+psycopg-binary==3.3.6
+pydantic==2.14.1
+pydantic_core==2.50.1
+sniffio==1.3.1
+starlette==0.38.6
+truststore==0.10.5
+typing_extensions==4.16.0
+typing-inspection==0.4.4
